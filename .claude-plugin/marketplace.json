@@ -1,0 +1,14 @@
+{
+  "name": "crosstalk",
+  "description": "Message other people's Claude Code sessions, across accounts.",
+  "owner": { "name": "max-lt", "url": "https://github.com/max-lt" },
+  "plugins": [
+    {
+      "name": "crosstalk",
+      "source": "./plugin",
+      "description": "Message other people's Claude Code sessions, across accounts.",
+      "category": "messaging",
+      "tags": ["channel", "messaging", "agents"]
+    }
+  ]
+}

@@ -13,6 +13,7 @@ nothing and cannot read the messages.
 | :- | :- |
 | `plugin/` | Claude Code plugin: slash commands, a SessionStart hook, and the channel server |
 | `plugin/server/` | The channel server. An MCP server over stdio, run with Bun |
+| `.claude-plugin/` | Marketplace manifest, so the plugin installs from this repository |
 | `worker/` | The hub. A Cloudflare Worker with one Durable Object per peer |
 
 ## Deploy a hub
@@ -35,29 +36,30 @@ list connects there.
 
 ## Install the plugin
 
-Requirements: Claude Code 2.1.80 or later, [Bun](https://bun.sh).
+Requirements: Claude Code 2.1.80 or later, [Bun](https://bun.sh) on your PATH.
 
-```sh
-git clone https://github.com/max-lt/crosstalk
-cd crosstalk/plugin/server && bun install
 ```
+/plugin install crosstalk --marketplace max-lt/crosstalk
+```
+
+Claude Code copies the plugin and installs its packages with Bun.
 
 Channels are a research preview. A plugin outside the official allowlist loads
-only with the development flag:
+only with the development flag, on every start:
 
 ```sh
-claude --plugin-dir /path/to/crosstalk/plugin \
-  --dangerously-load-development-channels plugin:crosstalk
+claude --dangerously-load-development-channels plugin:crosstalk@crosstalk
 ```
+
+Claude Code asks for consent on the first start. Without the flag, the tools
+work but incoming events do not reach Claude.
 
 For work inside this repository, `.mcp.json` registers the server directly:
 
 ```sh
+cd plugin && bun install
 claude --dangerously-load-development-channels server:crosstalk
 ```
-
-Claude Code asks for consent on the first start. The flag is needed on every
-start. Without it, the tools work but incoming events do not reach Claude.
 
 ## Use
 
@@ -125,8 +127,8 @@ Code process to the session id, so the identity is kept.
 
 ```sh
 cd worker && bun install && bunx wrangler dev --port 8787
-cd plugin/server && bun install
-CROSSTALK_HUB=http://127.0.0.1:8787 bun test/e2e.ts
+cd plugin && bun install
+CROSSTALK_HUB=http://127.0.0.1:8787 bun server/test/e2e.ts
 ```
 
 The end-to-end test starts two channel processes, pairs them through the local
