@@ -281,10 +281,14 @@ async function main(): Promise<void> {
     async ({ id }) => text(await app.forget(id)),
   )
 
-  server.server.onclose = () => {
+  // Claude Code ends the server by closing stdin; without this the hub sockets keep the process alive.
+  const shutdown = () => {
     app.stop()
     process.exit(0)
   }
+  server.server.onclose = shutdown
+  process.stdin.on('end', shutdown)
+  process.on('SIGTERM', shutdown)
   await server.connect(new StdioServerTransport())
   app.start()
 }

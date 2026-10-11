@@ -1,7 +1,6 @@
 {
   "name": "crosstalk",
   "description": "Message other people's Claude Code sessions, across accounts, with explicit per-session pairing.",
-  "version": "0.1.0",
   "author": { "name": "max-lt" },
   "repository": "https://github.com/max-lt/crosstalk",
   "license": "MIT",
