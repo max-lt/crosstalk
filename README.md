@@ -54,12 +54,15 @@ claude --dangerously-load-development-channels plugin:crosstalk@crosstalk
 Claude Code asks for consent on the first start. Without the flag, the tools
 work but incoming events do not reach Claude.
 
-For work inside this repository, `.mcp.json` registers the server directly:
+To run the plugin from a checkout instead of the installed copy:
 
 ```sh
 cd plugin && bun install
-claude --dangerously-load-development-channels server:crosstalk
+claude --plugin-dir ./plugin --dangerously-load-development-channels plugin:crosstalk@inline
 ```
+
+Do not combine this with the installed plugin in the same session. Two channel
+processes would share one identity, and every event would arrive twice.
 
 ## Use
 
