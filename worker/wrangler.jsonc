@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "crosstalk-hub",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-10-01",
+  "durable_objects": {
+    "bindings": [{ "name": "PEER", "class_name": "Peer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Peer"] }],
+  "observability": { "enabled": true }
+}
