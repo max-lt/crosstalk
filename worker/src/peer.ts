@@ -15,6 +15,8 @@ interface Attachment {
 }
 
 const SENDS_PER_MINUTE = 60
+const PING = '{"type":"ping"}'
+const PONG = '{"type":"pong"}'
 const MAX_ENVELOPE_BYTES = 64 * 1024
 
 // One instance per peer id. Holds only live sockets; nothing survives the last disconnect.
@@ -22,6 +24,8 @@ export class Peer extends DurableObject<Env> {
   private sentAt: number[] = []
 
   async fetch(request: Request): Promise<Response> {
+    // Answered while hibernating, so the client's keepalive costs nothing here.
+    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG))
     const pair = new WebSocketPair()
     const [client, server] = Object.values(pair)
     const nonce = bytesToHex(randomBytes(32))
@@ -56,13 +60,21 @@ export class Peer extends DurableObject<Env> {
     await this.relay(ws, msg.env)
   }
 
-  async webSocketClose(ws: WebSocket): Promise<void> {
+  async webSocketClose(ws: WebSocket, code: number): Promise<void> {
+    console.log(`close ${short(this.ctx.id.name!)} code ${code}, ${this.ctx.getWebSockets().length - 1} left`)
+    ws.close()
+  }
+
+  async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
+    console.log(`error ${short(this.ctx.id.name!)}: ${String(error)}`)
     ws.close()
   }
 
   // Exposed over DO RPC to the sender's Peer instance.
   async deliver(env: Envelope): Promise<boolean> {
-    const live = this.ctx.getWebSockets().filter(w => (w.deserializeAttachment() as Attachment).authed)
+    const all = this.ctx.getWebSockets()
+    const live = all.filter(w => (w.deserializeAttachment() as Attachment).authed)
+    console.log(`deliver to ${short(this.ctx.id.name!)}: ${live.length} authed of ${all.length} sockets`)
     if (live.length === 0) return false
     const frame = JSON.stringify({ type: 'deliver', env } satisfies HubMessage)
     for (const w of live) w.send(frame)
@@ -76,6 +88,7 @@ export class Peer extends DurableObject<Env> {
       return
     }
     ws.serializeAttachment({ ...att, authed: true } satisfies Attachment)
+    console.log(`auth ok ${short(id)}, ${this.ctx.getWebSockets().length} sockets`)
     this.reply(ws, { type: 'ready', id })
   }
 
@@ -91,6 +104,7 @@ export class Peer extends DurableObject<Env> {
     }
     const target = this.env.PEER.get(this.env.PEER.idFromName(env.to))
     const delivered = await target.deliver(env)
+    console.log(`relay ${short(id)} -> ${short(env.to)} ${delivered ? 'delivered' : 'offline'}`)
     this.reply(ws, { type: 'status', ref: env.id, status: delivered ? 'delivered' : 'offline' })
   }
 
@@ -105,6 +119,10 @@ export class Peer extends DurableObject<Env> {
   private reply(ws: WebSocket, msg: HubMessage): void {
     ws.send(JSON.stringify(msg))
   }
+}
+
+function short(id: string): string {
+  return id.slice(ID_PREFIX.length, ID_PREFIX.length + 8)
 }
 
 function verify(id: string, host: string, nonce: string, sigHex: string): boolean {
