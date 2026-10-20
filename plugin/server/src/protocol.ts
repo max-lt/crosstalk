@@ -16,7 +16,7 @@ export interface Envelope {
 
 export type DeliveryStatus = 'delivered' | 'offline' | 'rejected' | 'throttled' | 'timeout'
 
-export type ClientMessage = { type: 'auth'; sig: string } | { type: 'send'; env: Envelope }
+export type ClientMessage = { type: 'auth'; sig: string } | { type: 'send'; env: Envelope } | { type: 'ping' }
 
 export type HubMessage =
   | { type: 'challenge'; nonce: string }
@@ -24,6 +24,7 @@ export type HubMessage =
   | { type: 'deliver'; env: Envelope }
   | { type: 'status'; ref: string; status: Exclude<DeliveryStatus, 'timeout'> }
   | { type: 'error'; message: string }
+  | { type: 'pong' }
 
 export type PayloadKind = 'intro' | 'accept' | 'msg' | 'forget'
 

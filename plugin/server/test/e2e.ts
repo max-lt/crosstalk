@@ -11,6 +11,14 @@ const hub = process.env.CROSSTALK_HUB
 if (!hub) throw new Error('set CROSSTALK_HUB')
 const home = mkdtempSync(join(tmpdir(), 'crosstalk-e2e-'))
 const main = join(import.meta.dir, '..', 'src', 'main.ts')
+const cliPath = join(import.meta.dir, '..', 'src', 'cli.ts')
+
+// The CLI reaches a session's channel process over its control socket.
+function cli(session: string, ...args: string[]): string {
+  const run = Bun.spawnSync(['bun', cliPath, ...args], { env: { ...process.env, CROSSTALK_HOME: home, CROSSTALK_SESSION: session } })
+  if (run.exitCode !== 0) throw new Error(`cli ${args.join(' ')}: ${run.stderr.toString()}`)
+  return run.stdout.toString().trim()
+}
 
 const ChannelEvent = z.object({
   method: z.literal('notifications/claude/channel'),
@@ -100,7 +108,8 @@ try {
 expect(threw, 'send before accept is refused locally')
 
 const acceptedEvent = a.nextEvent()
-await b.call('crosstalk_accept', { id: aId, description: 'Bob, on the plugin' })
+expect(cli('bob', 'whoami').startsWith(bId), 'cli whoami matches the tool')
+expect(cli('bob', 'accept', aId, 'Bob, on the plugin').startsWith('accepted'), 'bob accepts from the cli')
 const accepted = await acceptedEvent
 expect(accepted.meta?.kind === 'accepted' && accepted.content === 'Bob, on the plugin', 'alice got the acceptance')
 expect((await a.call('crosstalk_peers')).includes(`accepted    ${bId}`), 'alice lists bob as accepted')

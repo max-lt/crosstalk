@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs the crosstalk CLI of this plugin copy. The SessionStart hook links
+# ~/.crosstalk/bin/crosstalk here, so one PATH entry follows plugin updates.
+exec bun "$(dirname "$(readlink "$0" || echo "$0")")/../server/src/cli.ts" "$@"

@@ -54,6 +54,9 @@ claude --dangerously-load-development-channels plugin:crosstalk@crosstalk
 Claude Code asks for consent on the first start. Without the flag, the tools
 work but incoming events do not reach Claude.
 
+After a plugin update, restart Claude Code. `/reload-plugins` keeps the old
+channel process, and its events stop reaching the conversation.
+
 To run the plugin from a checkout instead of the installed copy:
 
 ```sh
@@ -66,25 +69,46 @@ processes would share one identity, and every event would arrive twice.
 
 ## Use
 
+The `crosstalk` command talks to the channel process of the session you are
+in. No model turn. Add it to your PATH once:
+
+```sh
+export PATH="$HOME/.crosstalk/bin:$PATH"
+```
+
+The SessionStart hook keeps `~/.crosstalk/bin/crosstalk` linked to the
+installed plugin. In the Claude Code prompt, type `!` before the command:
+
 | Command | Effect |
 | :- | :- |
-| `/crosstalk:add-hub <url>` | Add a hub to your hub list and connect to it. The first hub in the list replaces the default |
-| `/crosstalk:whoami` | Show this session's id and hub connections |
-| `/crosstalk:connect [<hub>:]<id> [description]` | Send a pairing request to another session |
-| `/crosstalk:peers` | List peers and their pairing state |
-| `/crosstalk:forget [<id>]` | Drop one peer, or delete this session's identity |
+| `! crosstalk whoami` | Show this session's id and hub connections |
+| `! crosstalk peers` | List peers and their pairing state |
+| `! crosstalk connect [<hub>:]<id> [description]` | Send a pairing request to another session |
+| `! crosstalk accept <id> [description]` | Accept a pairing request |
+| `! crosstalk send <id> <text>` | Send a message to an accepted peer |
+| `! crosstalk inbox [wait_seconds]` | Read pending events (for hosts without channels) |
+| `! crosstalk forget [<id>]` | Drop one peer, or delete this session's identity |
+| `! crosstalk add-hub <url>` | Add a hub to your hub list and connect to it. The first hub in the list replaces the default |
+
+The same operations exist as slash commands (`/crosstalk:whoami`,
+`/crosstalk:connect`, ...) and as MCP tools (`crosstalk_*`). Those go through
+the model. Use them when you want Claude to write the message or the
+description.
 
 A session's id looks like `crosstalk_7Hq...` (44 base58 characters after the
 prefix). Share it over chat.
 
+Outside Claude Code, the command finds the session when only one channel
+process runs. With more than one, set `CROSSTALK_SESSION`.
+
 ### Pairing
 
-1. Alice runs `/crosstalk:whoami` and sends her id to Bob over chat.
-2. Bob runs `/crosstalk:connect crosstalk_... "Bob, on the payments API"`.
-3. Alice's Claude shows Bob's description and asks Alice. If she agrees, it
-   calls `crosstalk_accept`. Claude Code shows a permission prompt for that
-   call. The prompt is the consent step. Do not add `crosstalk_accept` to an
-   allow list.
+1. Alice runs `! crosstalk whoami` and sends her id to Bob over chat.
+2. Bob runs `! crosstalk connect crosstalk_... Bob, on the payments API`.
+3. Alice's Claude shows Bob's description and his id as a channel event.
+   Alice runs `! crosstalk accept crosstalk_... Alice, on the hub`. This is
+   the consent step. Claude does not call `crosstalk_accept` unless Alice
+   asks it to. Do not add `crosstalk_accept` to an allow list.
 4. Bob's Claude reports the acceptance. From then on, both agents can call
    `crosstalk_send`, and incoming messages arrive as channel events.
 
@@ -102,6 +126,9 @@ Ed25519 key pair. The id is the public key.
 
 crosstalk stores the key and the accepted peers in
 `~/.crosstalk/sessions/<session id>/`. Only your user can read the files.
+
+Each channel process also listens on `~/.crosstalk/sessions/<session id>/ctl.sock`.
+The `crosstalk` command sends its requests there.
 
 The identity survives `claude --resume <id>` and `/clear`. A `/clear` starts a
 new conversation but keeps the id, so your peers can still reach you. For

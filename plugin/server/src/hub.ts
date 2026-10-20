@@ -5,6 +5,8 @@ export type HubStatus = 'connecting' | 'connected' | 'disconnected'
 
 const SEND_TIMEOUT_MS = 10_000
 const MAX_BACKOFF_MS = 30_000
+const PING_INTERVAL_MS = 30_000
+const PONG_TIMEOUT_MS = 10_000
 
 export function normalizeHubUrl(input: string): string {
   const url = new URL(input.includes('://') ? input : `https://${input}`)
@@ -22,6 +24,8 @@ export class HubConnection {
   private pending = new Map<string, (status: DeliveryStatus) => void>()
   private attempts = 0
   private stopped = false
+  private pingTimer?: ReturnType<typeof setInterval>
+  private pongTimer?: ReturnType<typeof setTimeout>
 
   constructor(
     readonly url: string,
@@ -41,7 +45,25 @@ export class HubConnection {
 
   stop(): void {
     this.stopped = true
+    this.stopKeepalive()
     this.ws?.close()
+  }
+
+  // A half-open socket looks connected forever without this; a missed pong forces a reconnect.
+  private startKeepalive(ws: WebSocket): void {
+    this.stopKeepalive()
+    this.pingTimer = setInterval(() => {
+      ws.send('{"type":"ping"}')
+      this.pongTimer = setTimeout(() => {
+        this.log(`hub ${this.host}: no pong, reconnecting`)
+        ws.close()
+      }, PONG_TIMEOUT_MS)
+    }, PING_INTERVAL_MS)
+  }
+
+  private stopKeepalive(): void {
+    clearInterval(this.pingTimer)
+    clearTimeout(this.pongTimer)
   }
 
   send(env: Envelope): Promise<DeliveryStatus> {
@@ -69,6 +91,7 @@ export class HubConnection {
     ws.onmessage = event => this.onMessage(ws, JSON.parse(String(event.data)))
     ws.onclose = event => {
       this.status = 'disconnected'
+      this.stopKeepalive()
       for (const resolve of this.pending.values()) resolve('offline')
       this.pending.clear()
       if (this.stopped) return
@@ -88,7 +111,11 @@ export class HubConnection {
       case 'ready':
         this.status = 'connected'
         this.attempts = 0
+        this.startKeepalive(ws)
         this.log(`hub ${this.host} ready`)
+        return
+      case 'pong':
+        clearTimeout(this.pongTimer)
         return
       case 'deliver':
         this.onDeliver(msg.env, this.host)
