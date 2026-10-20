@@ -1,5 +1,5 @@
 // Two channel processes pair and exchange messages through a hub.
-// Usage: CROSSTALK_HUB=http://127.0.0.1:8787 bun test/e2e.ts
+// Usage: CROSSTALK_HUB=http://127.0.0.1:8787 [CROSSTALK_BIN=../client/target/release/crosstalk] bun e2e.ts
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { mkdtempSync } from 'node:fs'
@@ -10,12 +10,13 @@ import { z } from 'zod'
 const hub = process.env.CROSSTALK_HUB
 if (!hub) throw new Error('set CROSSTALK_HUB')
 const home = mkdtempSync(join(tmpdir(), 'crosstalk-e2e-'))
-const main = join(import.meta.dir, '..', 'src', 'main.ts')
-const cliPath = join(import.meta.dir, '..', 'src', 'cli.ts')
+const bin = process.env.CROSSTALK_BIN ?? 'crosstalk'
+const channelCommand = [bin, 'mcp']
+const cliCommand = [bin]
 
 // The CLI reaches a session's channel process over its control socket.
 function cli(session: string, ...args: string[]): string {
-  const run = Bun.spawnSync(['bun', cliPath, ...args], { env: { ...process.env, CROSSTALK_HOME: home, CROSSTALK_SESSION: session } })
+  const run = Bun.spawnSync([...cliCommand, ...args], { env: { ...process.env, CROSSTALK_HOME: home, CROSSTALK_SESSION: session } })
   if (run.exitCode !== 0) throw new Error(`cli ${args.join(' ')}: ${run.stderr.toString()}`)
   return run.stdout.toString().trim()
 }
@@ -41,8 +42,8 @@ class Peer {
       this.waiters.splice(0).forEach(w => w(n.params))
     })
     const transport = new StdioClientTransport({
-      command: 'bun',
-      args: [main],
+      command: channelCommand[0],
+      args: channelCommand.slice(1),
       env: { ...process.env, CROSSTALK_HOME: home, CROSSTALK_SESSION: this.session, CROSSTALK_HUB: hub! },
       stderr: 'pipe',
     })

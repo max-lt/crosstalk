@@ -1,0 +1,15 @@
+{
+  "name": "crosstalk-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "bun e2e.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0"
+  }
+}

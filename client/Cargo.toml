@@ -1,0 +1,36 @@
+[package]
+name = "crosstalk"
+version = "0.1.0"
+edition = "2021"
+description = "Message other people's agent sessions, across accounts"
+license = "MIT"
+repository = "https://github.com/max-lt/crosstalk"
+
+[[bin]]
+name = "crosstalk"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-std", "io-util", "sync", "time", "process", "signal", "fs"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ed25519-dalek = { version = "3", features = ["rand_core"] }
+x25519-dalek = { version = "3", features = ["static_secrets"] }
+chacha20poly1305 = "0.11"
+hkdf = "0.13"
+sha2 = "0.11"
+bs58 = "0.5"
+base64 = "0.22"
+hex = "0.4"
+rand = "0.9"
+url = "2"
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

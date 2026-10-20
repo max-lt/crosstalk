@@ -1,15 +1,28 @@
 {
   "name": "crosstalk",
   "description": "Message other people's Claude Code sessions, across accounts, with explicit per-session pairing.",
-  "author": { "name": "max-lt" },
+  "author": {
+    "name": "max-lt"
+  },
   "repository": "https://github.com/max-lt/crosstalk",
   "license": "MIT",
-  "keywords": ["channel", "messaging", "agents"],
+  "keywords": [
+    "channel",
+    "messaging",
+    "agents"
+  ],
   "mcpServers": {
     "crosstalk": {
-      "command": "bun",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/server/src/main.ts"]
+      "command": "crosstalk",
+      "args": [
+        "mcp"
+      ]
     }
   },
-  "channels": [{ "server": "crosstalk", "displayName": "crosstalk" }]
+  "channels": [
+    {
+      "server": "crosstalk",
+      "displayName": "crosstalk"
+    }
+  ]
 }
