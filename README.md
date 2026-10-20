@@ -11,10 +11,12 @@ nothing and cannot read the messages.
 
 | Directory | What it is |
 | :- | :- |
-| `plugin/` | Claude Code plugin: slash commands, a SessionStart hook, and the channel server |
-| `plugin/server/` | The channel server. An MCP server over stdio, run with Bun |
+| `client/` | The `crosstalk` binary: channel process (`mcp`, `daemon`) and command line tool |
+| `plugin/` | Claude Code plugin: slash commands and a SessionStart hook. Starts `crosstalk mcp` |
 | `.claude-plugin/` | Marketplace manifest, so the plugin installs from this repository |
 | `worker/` | The hub. A Cloudflare Worker with one Durable Object per peer |
+| `test/` | End-to-end test, run with Bun against a local hub |
+| `docs/codex.md` | Setup for Codex |
 
 ## Deploy a hub
 
@@ -34,15 +36,26 @@ the same hub to reach each other.
 The default hub is `https://crosstalk.lechat.dev`. A session with no hub in its
 list connects there.
 
-## Install the plugin
+## Install
 
-Requirements: Claude Code 2.1.80 or later, [Bun](https://bun.sh) on your PATH.
+Requirements: Claude Code 2.1.80 or later, a Rust toolchain for the install.
 
-```
-/plugin install crosstalk --marketplace max-lt/crosstalk
-```
+1. Install the `crosstalk` binary on your PATH:
 
-Claude Code copies the plugin and installs its packages with Bun.
+   ```sh
+   cargo install --git https://github.com/max-lt/crosstalk crosstalk
+   ```
+
+   From a clone: `cargo install --path client`.
+
+2. Install the plugin:
+
+   ```
+   /plugin install crosstalk --marketplace max-lt/crosstalk
+   ```
+
+The plugin starts `crosstalk mcp` as its channel server. The same binary is
+the command line tool.
 
 Channels are a research preview. A plugin outside the official allowlist loads
 only with the development flag, on every start:
@@ -60,7 +73,6 @@ channel process, and its events stop reaching the conversation.
 To run the plugin from a checkout instead of the installed copy:
 
 ```sh
-cd plugin && bun install
 claude --plugin-dir ./plugin --dangerously-load-development-channels plugin:crosstalk@inline
 ```
 
@@ -70,14 +82,7 @@ processes would share one identity, and every event would arrive twice.
 ## Use
 
 The `crosstalk` command talks to the channel process of the session you are
-in. No model turn. Add it to your PATH once:
-
-```sh
-export PATH="$HOME/.crosstalk/bin:$PATH"
-```
-
-The SessionStart hook keeps `~/.crosstalk/bin/crosstalk` linked to the
-installed plugin. In the Claude Code prompt, type `!` before the command:
+in. No model turn. In the Claude Code prompt, type `!` before the command:
 
 | Command | Effect |
 | :- | :- |
@@ -153,17 +158,30 @@ Code process to the session id, so the identity is kept.
 - The channel process signs the hub host it dialed, so a hub cannot replay
   the login to another hub.
 
+## Codex and other hosts
+
+Hosts without channel push run the channel process as a daemon and get events
+through `codex queue`. A Codex SessionStart hook starts it:
+
+```sh
+crosstalk codex-hook --config ~/.codex/hooks/crosstalk.json
+```
+
+See `docs/codex.md`.
+
 ## Develop
 
 ```sh
 cd worker && bun install && bunx wrangler dev --port 8787
-cd plugin && bun install
-CROSSTALK_HUB=http://127.0.0.1:8787 bun server/test/e2e.ts
+cd client && cargo build --release && cargo test
+cd test && bun install
+CROSSTALK_BIN=../client/target/release/crosstalk CROSSTALK_HUB=http://127.0.0.1:8787 bun e2e.ts
 ```
 
 The end-to-end test starts two channel processes, pairs them through the local
 hub, exchanges messages, restarts one process to check that its id survives,
-and checks `forget` and offline delivery.
+and checks `forget` and offline delivery. Without `CROSSTALK_BIN` it uses the
+`crosstalk` on your PATH.
 
 Environment variables for tests and debugging:
 
