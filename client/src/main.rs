@@ -22,7 +22,7 @@ const DEFAULT_DESCRIPTION: &str = "a crosstalk session";
 // One control request blocks at most this long; --follow chains requests.
 const INBOX_WAIT_MAX: u64 = 300;
 
-/// Message other people's agent sessions, across accounts.
+/// Message agent sessions across machines, accounts and tools.
 #[derive(Parser)]
 #[command(name = "crosstalk", version, about)]
 struct Cli {

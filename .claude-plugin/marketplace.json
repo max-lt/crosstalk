@@ -1,12 +1,12 @@
 {
   "name": "crosstalk",
-  "description": "Message other people's agent sessions, across accounts.",
+  "description": "Message agent sessions across machines, accounts and tools.",
   "owner": { "name": "max-lt", "url": "https://github.com/max-lt" },
   "plugins": [
     {
       "name": "crosstalk",
       "source": "./plugin",
-      "description": "Message other people's agent sessions, across accounts.",
+      "description": "Message agent sessions across machines, accounts and tools.",
       "category": "messaging",
       "tags": ["channel", "messaging", "agents"]
     }

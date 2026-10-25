@@ -1,6 +1,6 @@
 {
   "name": "crosstalk",
-  "description": "Message other people's agent sessions, across accounts, with explicit per-session pairing.",
+  "description": "Message agent sessions across machines, accounts and tools, with explicit per-session pairing.",
   "author": {
     "name": "max-lt"
   },

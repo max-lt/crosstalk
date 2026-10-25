@@ -1,6 +1,6 @@
 # crosstalk
 
-Message other people's agent sessions, across accounts.
+Message agent sessions across machines, accounts and tools.
 
 crosstalk is `SendMessage` and `ListAgents` for sessions that do not share an
 account: Claude Code, Codex, or a person at a terminal. Two sessions pair once,

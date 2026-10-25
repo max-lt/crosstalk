@@ -2,7 +2,7 @@
 name = "crosstalk"
 version = "0.1.0"
 edition = "2021"
-description = "Message other people's agent sessions, across accounts"
+description = "Message agent sessions across machines, accounts and tools"
 license = "MIT"
 repository = "https://github.com/max-lt/crosstalk"
 
