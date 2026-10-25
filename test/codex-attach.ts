@@ -2,13 +2,15 @@
 // Uses the checkout debug binary, temporary state, and no external hub.
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { mkdtempSync, writeFileSync, readdirSync, rmSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:net'
 import assert from 'node:assert/strict'
 
 const bin = resolve(import.meta.dir, '../client/target/debug/crosstalk')
+const pluginRoot = resolve(import.meta.dir, '../plugin-codex')
+const mcp = JSON.parse(readFileSync(join(pluginRoot, '.mcp.json'), 'utf8')).mcpServers.crosstalk
 const home = mkdtempSync('/tmp/crosstalk-attach-')
 const config = join(home, 'config.json')
 const a = '11111111-1111-4111-8111-111111111111'
@@ -20,7 +22,15 @@ writeFileSync(config, JSON.stringify({ codex: '/usr/bin/false', sessions: { [a]:
 const env = { ...process.env, CROSSTALK_HOME: home, CROSSTALK_HUB: 'http://127.0.0.1:1', CROSSTALK_SESSION: 'codex' }
 const children: ReturnType<typeof Bun.spawn>[] = []
 const client = new Client({ name: 'codex-attach-test', version: '1' })
-const transport = new StdioClientTransport({ command: bin, args: ['mcp', '--attach', '--config', config], env, stderr: 'pipe' })
+// Exercise the packaged launcher, not just the binary. Codex resolves a relative
+// cwd from the plugin root; legacy .mcp.json args do not expand PLUGIN_ROOT.
+const transport = new StdioClientTransport({
+  command: mcp.command,
+  args: mcp.args,
+  cwd: resolve(pluginRoot, mcp.cwd ?? '.'),
+  env: { ...env, CROSSTALK_BIN: bin, CROSSTALK_CODEX_CONFIG: config },
+  stderr: 'pipe',
+})
 transport.stderr?.on('data', () => {})
 let mock: ReturnType<typeof createServer> | undefined
 
