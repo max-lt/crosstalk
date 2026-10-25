@@ -5,7 +5,8 @@ pub const ID_PREFIX: &str = "crosstalk_";
 
 pub fn is_id(s: &str) -> bool {
     let Some(rest) = s.strip_prefix(ID_PREFIX) else { return false };
-    (43..=44).contains(&rest.len()) && rest.bytes().all(|b| b.is_ascii_alphanumeric() && !b"0OIl".contains(&b))
+    (43..=44).contains(&rest.len())
+        && rest.bytes().all(|b| b.is_ascii_alphanumeric() && !b"0OIl".contains(&b))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

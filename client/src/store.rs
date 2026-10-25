@@ -77,7 +77,11 @@ pub fn write_pid_file(home: &Path, pid: &str, session: &str) -> std::io::Result<
     fs::write(dir.join(pid), session)?;
     let day = Duration::from_secs(24 * 3600);
     for entry in fs::read_dir(&dir)?.flatten() {
-        let stale = entry.metadata().and_then(|m| m.modified()).map(|t| t.elapsed().unwrap_or_default() > day).unwrap_or(false);
+        let stale = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .map(|t| t.elapsed().unwrap_or_default() > day)
+            .unwrap_or(false);
         if stale {
             let _ = fs::remove_file(entry.path());
         }
@@ -138,7 +142,10 @@ impl Store {
     }
 
     pub fn hubs(&self) -> Vec<String> {
-        fs::read_to_string(self.home.join("hubs.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+        fs::read_to_string(self.home.join("hubs.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default()
     }
 
     pub fn add_hub(&self, url: &str) {

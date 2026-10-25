@@ -63,7 +63,8 @@ impl Identity {
         let key = self.shared_key(&to_key, &self.public, &to_key.to_bytes());
         let cipher = XChaCha20Poly1305::new((&key).into());
         let plain = serde_json::to_vec(payload).map_err(|e| e.to_string())?;
-        let ct = cipher.encrypt(&XNonce::from(nonce), plain.as_ref()).map_err(|_| "encrypt failed".to_string())?;
+        let ct =
+            cipher.encrypt(&XNonce::from(nonce), plain.as_ref()).map_err(|_| "encrypt failed".to_string())?;
         let mut env = Envelope {
             v: 1,
             id: hex::encode(id),
@@ -91,7 +92,8 @@ impl Identity {
         let sig = Signature::from_slice(&sig_bytes).map_err(|_| "bad signature")?;
         from_key.verify(env.signed_text().as_bytes(), &sig).map_err(|_| "bad signature")?;
         let key = self.shared_key(&from_key, &from_key.to_bytes(), &self.public);
-        let nonce: [u8; 24] = hex::decode(&env.nonce).map_err(|_| "bad nonce")?.try_into().map_err(|_| "bad nonce")?;
+        let nonce: [u8; 24] =
+            hex::decode(&env.nonce).map_err(|_| "bad nonce")?.try_into().map_err(|_| "bad nonce")?;
         let ct = B64.decode(&env.ct).map_err(|_| "bad ciphertext")?;
         let cipher = XChaCha20Poly1305::new((&key).into());
         let plain = cipher.decrypt(&XNonce::from(nonce), ct.as_ref()).map_err(|_| "decrypt failed")?;

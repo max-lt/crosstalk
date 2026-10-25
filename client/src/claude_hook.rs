@@ -34,21 +34,35 @@ async fn wait_socket(socket: &std::path::Path) -> bool {
 async fn session_start(socket: &std::path::Path, live: bool) -> Result<(), String> {
     let (id, hub) = if wait_socket(socket).await {
         let req = ControlRequest { cmd: "status".into(), args: vec![] };
-        let status: Value = serde_json::from_str(&control::request(socket, &req, Duration::from_secs(3)).await?).map_err(|e| e.to_string())?;
-        let hubs = status["hubs"].as_object().map(|h| h.iter().map(|(k, v)| format!("{k} {}", v.as_str().unwrap_or("?"))).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+        let status: Value =
+            serde_json::from_str(&control::request(socket, &req, Duration::from_secs(3)).await?)
+                .map_err(|e| e.to_string())?;
+        let hubs = status["hubs"]
+            .as_object()
+            .map(|h| {
+                h.iter()
+                    .map(|(k, v)| format!("{k} {}", v.as_str().unwrap_or("?")))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
         (status["id"].as_str().unwrap_or("?").to_string(), hubs)
     } else {
         ("channel process not running".to_string(), String::new())
     };
     let mode = if live { "channels: live".to_string() } else { format!("channels: off, {FLAG_HINT}") };
     let hub = if hub.is_empty() { String::new() } else { format!(" @ {hub}") };
-    let message = format!("crosstalk {id}{hub}. {mode}. Commands: ! crosstalk whoami|peers|connect|accept|send|inbox");
+    let message =
+        format!("crosstalk {id}{hub}. {mode}. Commands: ! crosstalk whoami|peers|connect|accept|send|inbox");
     let context = if live {
         "crosstalk is loaded; incoming events arrive as <channel> events.".to_string()
     } else {
         "crosstalk is loaded without channel push. Events are injected by the plugin hooks at the end of a turn or with the next prompt. For live delivery, arm a Monitor on `crosstalk inbox --follow` with its longest timeout, and re-arm it when it expires.".to_string()
     };
-    println!("{}", json!({ "systemMessage": message, "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": context } }));
+    println!(
+        "{}",
+        json!({ "systemMessage": message, "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": context } })
+    );
     Ok(())
 }
 
@@ -64,7 +78,9 @@ pub async fn run() -> Result<(), String> {
             write_pid_file(&home, &pid, sid).map_err(|e| e.to_string())?;
         }
     }
-    let Some(session) = std::env::var("CROSSTALK_SESSION").ok().or_else(|| session_from_claude(&home)) else { return Ok(()) };
+    let Some(session) = std::env::var("CROSSTALK_SESSION").ok().or_else(|| session_from_claude(&home)) else {
+        return Ok(());
+    };
     let socket = control::control_socket_path(&session_dir(&home, &session));
     if event == "SessionStart" {
         return session_start(&socket, live).await;

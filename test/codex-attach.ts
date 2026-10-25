@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 import { createServer } from 'node:net'
 import assert from 'node:assert/strict'
 
-const bin = resolve(import.meta.dir, '../client/target/debug/crosstalk')
+const bin = process.env.CROSSTALK_BIN ?? resolve(import.meta.dir, '../client/target/debug/crosstalk')
 const pluginRoot = resolve(import.meta.dir, '../plugin-codex')
 const mcp = JSON.parse(readFileSync(join(pluginRoot, '.mcp.json'), 'utf8')).mcpServers.crosstalk
 const home = mkdtempSync('/tmp/crosstalk-attach-')

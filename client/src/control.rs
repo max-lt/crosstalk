@@ -9,7 +9,6 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 
-
 #[derive(Serialize, Deserialize)]
 pub struct ControlRequest {
     pub cmd: String,
@@ -37,7 +36,12 @@ pub enum Ownership {
 }
 
 pub async fn is_alive(path: &Path) -> bool {
-    matches!(request(path, &ControlRequest { cmd: "ping".into(), args: vec![] }, Duration::from_secs(1)).await.as_deref(), Ok("pong"))
+    matches!(
+        request(path, &ControlRequest { cmd: "ping".into(), args: vec![] }, Duration::from_secs(1))
+            .await
+            .as_deref(),
+        Ok("pong")
+    )
 }
 
 pub struct ControlServer {
@@ -46,7 +50,11 @@ pub struct ControlServer {
 
 impl ControlServer {
     /// Binds the socket and serves requests in a background task. Returns None when another live process owns it.
-    pub async fn start<F, Fut>(session_dir: &Path, ownership: Ownership, handle: F) -> Result<Option<ControlServer>, String>
+    pub async fn start<F, Fut>(
+        session_dir: &Path,
+        ownership: Ownership,
+        handle: F,
+    ) -> Result<Option<ControlServer>, String>
     where
         F: Fn(ControlRequest) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<String, String>> + Send + 'static,
@@ -63,9 +71,14 @@ impl ControlServer {
             let _ = std::fs::remove_file(&path);
         }
         if let Some(dir) = path.parent() {
-            std::fs::DirBuilder::new().recursive(true).mode(0o700).create(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(dir)
+                .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
         }
-        let listener = UnixListener::bind(&path).map_err(|e| format!("cannot bind {}: {e}", path.display()))?;
+        let listener =
+            UnixListener::bind(&path).map_err(|e| format!("cannot bind {}: {e}", path.display()))?;
         let handle = Arc::new(handle);
         tokio::spawn(async move {
             loop {
