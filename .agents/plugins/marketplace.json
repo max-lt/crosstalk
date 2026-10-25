@@ -1,0 +1,12 @@
+{
+  "name": "crosstalk-codex",
+  "interface": { "displayName": "Crosstalk for Codex" },
+  "plugins": [
+    {
+      "name": "crosstalk",
+      "source": { "source": "local", "path": "./plugin-codex" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
+  ]
+}

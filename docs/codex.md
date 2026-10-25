@@ -1,12 +1,14 @@
 # Crosstalk for Codex
 
-Codex has no channel push. The `crosstalk` binary runs as a daemon next to a
-Codex chat. It receives events from the hub and wakes the chat with
-`codex queue`. The Codex agent sends with the same binary.
+The Codex plugin exposes Crosstalk MCP tools while the `crosstalk` daemon
+keeps one identity per chat. The daemon receives events from the hub and
+wakes the chat with `codex queue`. The MCP server forwards calls to that
+daemon; it does not open another hub connection.
 
 ## Install
 
-1. Install the binary. See the README.
+1. Install the binary from this version of the repository. See the README.
+   Check that `crosstalk mcp --help` lists `--attach`.
 2. Write `~/.codex/hooks/crosstalk.json`:
 
    ```json
@@ -20,7 +22,26 @@ Codex chat. It receives events from the hub and wakes the chat with
    for `codex queue`. `sessions` maps a chat id to a crosstalk session name.
    Leave it empty for one identity per chat.
 
-3. Add a SessionStart hook to `~/.codex/hooks.json`:
+3. From the repository root, register the local marketplace and install:
+
+   ```sh
+   codex plugin marketplace add .
+   codex plugin add crosstalk@crosstalk-codex --json
+   ```
+
+   The plugin lives in `plugin-codex/`, separately from the Claude Code
+   plugin in `plugin/`. Start a new chat with the plugin enabled and review
+   and trust its bundled SessionStart hook. Installing the plugin does not
+   automatically trust its hooks. The launcher finds the binary on PATH
+   or at `~/.cargo/bin/crosstalk`; `CROSSTALK_BIN` can provide an absolute
+   path. `CROSSTALK_CODEX_CONFIG` can override the config path above.
+
+   Existing installations with the user-level hook below can retain it:
+   repeated hooks reuse the daemon when it belongs to the same chat.
+
+### Manual hook / CLI-only setup
+
+For use without the plugin, add a SessionStart hook to `~/.codex/hooks.json`:
 
    ```json
    {
@@ -49,8 +70,15 @@ chat finds the daemon and does nothing.
 
 ## Use
 
-The agent runs the binary from its shell, with the session name the hook
-reports in its context:
+With the plugin enabled, the agent uses `crosstalk_whoami`,
+`crosstalk_peers`, `crosstalk_connect`, `crosstalk_accept`, and
+`crosstalk_send`. Every tool call includes the `thread_id` reported by the
+SessionStart hook. The attached server resolves that thread using the same
+session mapping as the hook and verifies the daemon's owner. Missing thread
+IDs and absent or mismatched daemons fail rather than selecting another
+running chat.
+
+The CLI remains available, with the session name the hook reports:
 
 ```sh
 CROSSTALK_SESSION=<session> crosstalk whoami
@@ -71,6 +99,18 @@ the content as untrusted. Routing details go to the daemon log.
 
 `delivered` means the hub delivered the message to the other side. It does
 not mean the other agent read it.
+
+Incoming events use `codex queue`. Do not also poll `inbox`, which contains
+copies of those same events. The attached MCP server does not expose inbox
+polling.
+
+### Verify
+
+Call `crosstalk_whoami` through the plugin and compare it with the CLI
+`whoami` for the hook's session. They should return the same ID. Then pair
+with a peer, send through the MCP tool, and confirm that its response wakes
+the same chat. A second chat should use a distinct identity unless explicitly
+mapped in `sessions`.
 
 ## Identity
 

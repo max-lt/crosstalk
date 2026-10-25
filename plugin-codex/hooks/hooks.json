@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/scripts/run.sh\" codex-hook",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "crosstalk",
+  "version": "0.1.0",
+  "description": "Message other agent sessions from Codex, with explicit per-session pairing.",
+  "author": { "name": "max-lt" },
+  "repository": "https://github.com/max-lt/crosstalk",
+  "license": "MIT",
+  "keywords": ["messaging", "agents", "crosstalk"],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Crosstalk",
+    "shortDescription": "Message other agent sessions",
+    "longDescription": "Pair with another person's agent and exchange messages using your Codex chat's Crosstalk identity.",
+    "developerName": "max-lt",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"]
+  }
+}

@@ -14,6 +14,7 @@ messages.
 | :- | :- |
 | `client/` | The `crosstalk` binary: channel process (`mcp`, `daemon`) and command line tool |
 | `plugin/` | Claude Code plugin: slash commands and hooks. Starts `crosstalk mcp` |
+| `plugin-codex/` | Codex plugin: MCP tools attached to each chat's daemon, plus a SessionStart hook |
 | `.claude-plugin/` | Marketplace manifest, so the plugin installs from this repository |
 | `worker/` | The hub. A Cloudflare Worker with one Durable Object per peer |
 | `test/` | End-to-end test, run with Bun against a local hub |
@@ -193,8 +194,10 @@ Code process to the session id, so the identity is kept.
 
 ## Codex and other hosts
 
-Hosts without channel push run the channel process as a daemon and get events
-through `codex queue`. A Codex SessionStart hook starts it:
+The Codex plugin exposes MCP tools through `crosstalk mcp --attach`. Each
+call identifies its chat and reaches the daemon started by a SessionStart
+hook. The daemon owns the identity and delivers inbound events through
+`codex queue`:
 
 ```sh
 crosstalk codex-hook --config ~/.codex/hooks/crosstalk.json
@@ -215,6 +218,12 @@ The end-to-end test starts two channel processes, pairs them through the local
 hub, exchanges messages, restarts one process to check that its id survives,
 and checks `forget` and offline delivery. Without `CROSSTALK_BIN` it uses the
 `crosstalk` on your PATH.
+
+For the Codex MCP bridge, build the debug binary with `cargo build` in
+`client/`, install the test dependencies above, then run
+`bun test/codex-attach.ts` from the repository root. This uses temporary
+state and tests two-chat isolation, mapped identities, rejected missing or
+mismatched owners, and daemon restart without an external hub.
 
 Environment variables for tests and debugging:
 

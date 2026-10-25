@@ -76,7 +76,14 @@ enum Command {
     /// Stop a daemon
     Stop,
     /// Run the channel process as a stdio MCP server (what the Claude Code plugin starts)
-    Mcp,
+    Mcp {
+        /// Expose the tools of existing daemons instead of running a channel process
+        #[arg(long)]
+        attach: bool,
+        /// Codex hook config, for the chat-to-session mapping (with --attach)
+        #[arg(long, requires = "attach")]
+        config: Option<PathBuf>,
+    },
     /// Run the channel process alone: hub connection and control socket, no MCP
     Daemon {
         /// Wake this Codex chat with `codex queue` on every inbound event
@@ -108,7 +115,8 @@ async fn main() {
         Command::AddHub { url } => client("add-hub", vec![url]).await,
         Command::Status => client("status", vec![]).await,
         Command::Stop => client("stop", vec![]).await,
-        Command::Mcp => run_channel(false, None).await,
+        Command::Mcp { attach: false, .. } => run_channel(false, None).await,
+        Command::Mcp { attach: true, config } => attach_mcp(config).await,
         Command::Daemon { codex_thread } => run_channel(true, codex_thread).await,
         Command::ClaudeHook => claude_hook::run().await,
         Command::CodexHook { config } => codex::hook(&config).await,
@@ -146,22 +154,65 @@ async fn socket_path(home: &Path) -> Result<PathBuf, String> {
     }
 }
 
-async fn request(cmd: &str, args: Vec<String>) -> Result<String, String> {
+async fn live_socket() -> Result<PathBuf, String> {
     let path = socket_path(&default_home()).await?;
     if !path.exists() {
         return Err(format!("no channel process for this session ({})", path.display()));
     }
+    Ok(path)
+}
+
+async fn request_at(path: &Path, cmd: &str, args: Vec<String>) -> Result<String, String> {
     let timeout = Duration::from_secs(INBOX_WAIT_MAX + 5);
-    let reply = control::request(&path, &ControlRequest { cmd: cmd.into(), args }, timeout).await?;
+    let reply = control::request(path, &ControlRequest { cmd: cmd.into(), args }, timeout).await?;
     match reply.strip_prefix("error: ") {
         Some(err) => Err(err.to_string()),
         None => Ok(reply),
     }
 }
 
+async fn request(cmd: &str, args: Vec<String>) -> Result<String, String> {
+    request_at(&live_socket().await?, cmd, args).await
+}
+
 async fn client(cmd: &str, args: Vec<String>) -> Result<(), String> {
     println!("{}", request(cmd, args).await?);
     Ok(())
+}
+
+// For hosts that spawn MCP servers freely (Codex): the tools of a chat's daemon, forwarded
+// over its control socket, with no identity or hub connection of their own. One attached
+// server serves every chat: each call names its thread, and the daemon must confirm it.
+// No fallback to "the only live daemon": a call without a thread is refused.
+async fn attach_mcp(config: Option<PathBuf>) -> Result<(), String> {
+    let config = Arc::new(config);
+    mcp::serve(mcp::stdout_writer(), true, move |thread, cmd, args| {
+        let config = config.clone();
+        async move {
+            if cmd == "inbox" {
+                return Err("crosstalk_inbox is not available here: events arrive as queued turns".to_string());
+            }
+            let thread = thread.ok_or("thread_id is required: this chat's id, from the session start hook")?;
+            let path = daemon_for_thread(&thread, config.as_deref()).await?;
+            request_at(&path, &cmd, args).await
+        }
+    })
+    .await;
+    Ok(())
+}
+
+// Fails closed: a daemon that serves another chat, or none, is an error, never a fallback.
+async fn daemon_for_thread(thread: &str, config: Option<&Path>) -> Result<PathBuf, String> {
+    let session = codex::session_for_thread(thread, config)?;
+    let path = control::control_socket_path(&session_dir(&default_home(), &session));
+    if !path.exists() || !control::is_alive(&path).await {
+        return Err(format!("no crosstalk daemon for this chat (session {session}); the Codex SessionStart hook starts it"));
+    }
+    let status: serde_json::Value = serde_json::from_str(&request_at(&path, "status", vec![]).await?).map_err(|e| e.to_string())?;
+    if status["daemon"] != true || status["session"] != session.as_str() || status["threadId"] != thread {
+        return Err(format!("the process on session {session} is not the daemon of this chat"));
+    }
+    Ok(path)
 }
 
 // Each batch of events is one stdout write, so a line-oriented reader (Monitor, tail) gets them as they land.
@@ -268,9 +319,9 @@ async fn run_channel(daemon: bool, codex_thread: Option<String>) -> Result<(), S
         stop_wait(&channel.stop).await;
     } else {
         // Claude Code ends the server by closing stdin; without this the hub sockets keep the process alive.
-        let serve = mcp::serve(writer, {
+        let serve = mcp::serve(writer, false, {
             let channel = channel.clone();
-            move |cmd, args| {
+            move |_thread, cmd, args| {
                 let channel = channel.clone();
                 async move { handle(&channel, ControlRequest { cmd, args }).await }
             }
