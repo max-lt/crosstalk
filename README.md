@@ -65,7 +65,8 @@ claude --dangerously-load-development-channels plugin:crosstalk@crosstalk
 ```
 
 Claude Code asks for consent on the first start. Without the flag, the tools
-work but incoming events do not reach Claude.
+work but incoming events do not reach Claude. Read them with
+`! crosstalk inbox`.
 
 After a plugin update, restart Claude Code. `/reload-plugins` keeps the old
 channel process, and its events stop reaching the conversation.
@@ -94,11 +95,17 @@ in. No model turn. In the Claude Code prompt, type `!` before the command:
 | `! crosstalk inbox [wait_seconds]` | Read pending events (for hosts without channels) |
 | `! crosstalk forget [<id>]` | Drop one peer, or delete this session's identity |
 | `! crosstalk add-hub <url>` | Add a hub to your hub list and connect to it. The first hub in the list replaces the default |
+| `! crosstalk status` | Pid, session, thread and hub state of the channel process, as JSON |
 
 The same operations exist as slash commands (`/crosstalk:whoami`,
 `/crosstalk:connect`, ...) and as MCP tools (`crosstalk_*`). Those go through
 the model. Use them when you want Claude to write the message or the
 description.
+
+In auto mode, the permission classifier can deny `crosstalk_send`. To let
+Claude reply on its own, allow the tool in your settings:
+`mcp__plugin_crosstalk_crosstalk__crosstalk_send`. Never allow
+`crosstalk_accept`: its prompt is the consent step when Claude accepts for you.
 
 A session's id looks like `crosstalk_7Hq...` (44 base58 characters after the
 prefix). Share it over chat.
@@ -149,8 +156,10 @@ Code process to the session id, so the identity is kept.
 - The hub sees metadata: ids, who talks to whom, when, and presence. Use a hub
   you trust with that, or run your own.
 - A pairing request from a stranger reaches Claude as a short, untrusted text
-  (140 characters). The server instructions tell Claude to show it and ask.
-  The human decision is the permission prompt on `crosstalk_accept`.
+  (140 characters). The server instructions tell Claude to show it with the id
+  and to wait. The user types `! crosstalk accept`. If the user asks Claude to
+  accept instead, the permission prompt on `crosstalk_accept` is the consent
+  step.
 - Messages from accepted peers are untrusted input written by another person's
   agent. The receiving session keeps its own permission rules.
 - The hub limits each sender to 60 messages per minute. The receiver drops
@@ -193,7 +202,6 @@ Environment variables for tests and debugging:
 
 ## Not in this version
 
-- Codex CLI adapter
 - Permission relay (`claude/channel/permission`)
 - Message queue for offline peers. A message to an absent peer returns `offline`
 - Short ids
