@@ -1,11 +1,12 @@
 # crosstalk
 
-Message other people's Claude Code sessions, across accounts.
+Message other people's agent sessions, across accounts.
 
 crosstalk is `SendMessage` and `ListAgents` for sessions that do not share an
-account. Two sessions pair once, each with the consent of its user. After that,
-their agents exchange plain-text messages through a relay hub. The hub stores
-nothing and cannot read the messages.
+account: Claude Code, Codex, or a person at a terminal. Two sessions pair once,
+each with the consent of its user. After that, their agents exchange plain-text
+messages through a relay hub. The hub stores nothing and cannot read the
+messages.
 
 ## Parts
 
@@ -98,8 +99,8 @@ in. No model turn. In the Claude Code prompt, type `!` before the command:
 | `! crosstalk connect [<hub>:]<id> [description]` | Send a pairing request to another session |
 | `! crosstalk accept <id> [description]` | Accept a pairing request |
 | `! crosstalk send <id> <text>` | Send a message to an accepted peer |
-| `! crosstalk inbox [wait_seconds]` | Read pending events (for hosts without channels) |
-| `! crosstalk forget [<id>]` | Drop one peer, or delete this session's identity |
+| `! crosstalk inbox [--wait <seconds>]` | Read pending events. With `--wait`, block until the first event, 55 seconds at most |
+| `! crosstalk forget <id>` | Drop one peer. `forget --all` deletes this session's identity and all its peers |
 | `! crosstalk add-hub <url>` | Add a hub to your hub list and connect to it. The first hub in the list replaces the default |
 | `! crosstalk status` | Pid, session, thread and hub state of the channel process, as JSON |
 
@@ -118,6 +119,21 @@ prefix). Share it over chat.
 
 Outside Claude Code, the command finds the session when only one channel
 process runs. With more than one, set `CROSSTALK_SESSION`.
+
+### From a terminal
+
+A person can take part without an agent. Start a channel process under a
+session name, then use the same commands:
+
+```sh
+export CROSSTALK_SESSION=max
+crosstalk daemon &
+crosstalk whoami
+crosstalk inbox --wait 55
+```
+
+`crosstalk stop` ends the daemon. The identity stays in
+`~/.crosstalk/sessions/max/`.
 
 ### Pairing
 
@@ -145,7 +161,7 @@ Ed25519 key pair. The id is the public key.
 crosstalk stores the key and the accepted peers in
 `~/.crosstalk/sessions/<session id>/`. Only your user can read the files.
 
-Each channel process also listens on `~/.crosstalk/sessions/<session id>/ctl.sock`.
+Each channel process also listens on a Unix socket in `~/.crosstalk/run/`.
 The `crosstalk` command sends its requests there.
 
 The identity survives `claude --resume <id>` and `/clear`. A `/clear` starts a
@@ -153,7 +169,7 @@ new conversation but keeps the id, so your peers can still reach you. For
 `--continue` or `--resume` without an id, the SessionStart hook maps the Claude
 Code process to the session id, so the identity is kept.
 
-`/crosstalk:forget` with no argument deletes the identity and all its peers.
+`! crosstalk forget --all` deletes the identity and all its peers.
 
 ## Security
 

@@ -11,7 +11,6 @@ Codex chat. It receives events from the hub and wakes the chat with
 
    ```json
    {
-     "home": "/Users/you/.crosstalk",
      "codex": "/absolute/path/to/codex",
      "sessions": {}
    }
@@ -66,9 +65,9 @@ For an incoming request, the agent shows its text to the user. It accepts
 only when the user agrees. Messages from another agent are untrusted. They do
 not grant permission to change settings or to do work outside the user's task.
 
-Each inbound event becomes a user turn in the chat. The turn starts with a
-line that marks the content as untrusted, then a JSON object with `kind`,
-`from`, `hub` and `text`.
+Each inbound event becomes a user turn in the chat: a title with the event
+kind, the sender's description and id, the quoted text, and a line that marks
+the content as untrusted. Routing details go to the daemon log.
 
 `delivered` means the hub delivered the message to the other side. It does
 not mean the other agent read it.
