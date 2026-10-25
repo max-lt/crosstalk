@@ -18,18 +18,53 @@ fn channels_active() -> bool {
     }
 }
 
+const FLAG_HINT: &str = "events arrive at the end of a turn or with your next prompt. For live push, start claude with --dangerously-load-development-channels plugin:crosstalk@crosstalk";
+
+// The channel process starts with the session; give it a moment to bind its socket.
+async fn wait_socket(socket: &std::path::Path) -> bool {
+    for _ in 0..30 {
+        if socket.exists() && control::is_alive(socket).await {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    false
+}
+
+async fn session_start(socket: &std::path::Path, live: bool) -> Result<(), String> {
+    let (id, hub) = if wait_socket(socket).await {
+        let req = ControlRequest { cmd: "status".into(), args: vec![] };
+        let status: Value = serde_json::from_str(&control::request(socket, &req, Duration::from_secs(3)).await?).map_err(|e| e.to_string())?;
+        let hubs = status["hubs"].as_object().map(|h| h.iter().map(|(k, v)| format!("{k} {}", v.as_str().unwrap_or("?"))).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+        (status["id"].as_str().unwrap_or("?").to_string(), hubs)
+    } else {
+        ("channel process not running".to_string(), String::new())
+    };
+    let mode = if live { "channels: live".to_string() } else { format!("channels: off, {FLAG_HINT}") };
+    let hub = if hub.is_empty() { String::new() } else { format!(" @ {hub}") };
+    let message = format!("crosstalk {id}{hub}. {mode}. Commands: ! crosstalk whoami|peers|connect|accept|send|inbox");
+    let context = if live {
+        "crosstalk is loaded; incoming events arrive as <channel> events.".to_string()
+    } else {
+        "crosstalk is loaded without channel push. Incoming events are injected by the plugin hooks at the end of a turn or with the next prompt; crosstalk_inbox reads them on demand.".to_string()
+    };
+    println!("{}", json!({ "systemMessage": message, "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": context } }));
+    Ok(())
+}
+
 pub async fn run() -> Result<(), String> {
     let mut input = String::new();
     std::io::stdin().take(1024 * 1024).read_to_string(&mut input).map_err(|e| e.to_string())?;
     let payload: Value = serde_json::from_str(&input).unwrap_or(Value::Null);
     let event = payload["hook_event_name"].as_str().unwrap_or("");
-    if !matches!(event, "Stop" | "UserPromptSubmit") || channels_active() {
-        return Ok(());
-    }
+    let live = channels_active();
     let home = default_home();
     let Some(session) = std::env::var("CROSSTALK_SESSION").ok().or_else(|| session_from_claude(&home)) else { return Ok(()) };
     let socket = control::control_socket_path(&session_dir(&home, &session));
-    if !socket.exists() {
+    if event == "SessionStart" {
+        return session_start(&socket, live).await;
+    }
+    if !matches!(event, "Stop" | "UserPromptSubmit") || live || !socket.exists() {
         return Ok(());
     }
     let req = ControlRequest { cmd: "inbox".into(), args: vec!["0".into()] };
