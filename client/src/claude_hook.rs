@@ -1,7 +1,7 @@
 // Claude Code Stop and UserPromptSubmit hook. Without channel push, it hands pending
 // events to the model at the end of a turn or with the next prompt.
 use crate::control::{self, ControlRequest};
-use crate::store::{default_home, session_dir, session_from_claude};
+use crate::store::{default_home, session_dir, session_from_claude, write_pid_file};
 use serde_json::{json, Value};
 use std::io::Read;
 use std::time::Duration;
@@ -59,6 +59,11 @@ pub async fn run() -> Result<(), String> {
     let event = payload["hook_event_name"].as_str().unwrap_or("");
     let live = channels_active();
     let home = default_home();
+    if event == "SessionStart" {
+        if let (Some(sid), Ok(pid)) = (payload["session_id"].as_str(), std::env::var("CLAUDE_PID")) {
+            write_pid_file(&home, &pid, sid).map_err(|e| e.to_string())?;
+        }
+    }
     let Some(session) = std::env::var("CROSSTALK_SESSION").ok().or_else(|| session_from_claude(&home)) else { return Ok(()) };
     let socket = control::control_socket_path(&session_dir(&home, &session));
     if event == "SessionStart" {

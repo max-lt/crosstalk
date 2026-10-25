@@ -68,6 +68,23 @@ pub async fn resolve_session_id(home: &Path) -> String {
     std::env::var("CLAUDE_CODE_SESSION_ID").unwrap_or_else(|_| "default".into())
 }
 
+// Written by the SessionStart hook: maps the Claude Code process to its session id, so the
+// channel server finds the right identity even when --continue hands it a fresh
+// CLAUDE_CODE_SESSION_ID. Files older than a day are stale processes.
+pub fn write_pid_file(home: &Path, pid: &str, session: &str) -> std::io::Result<()> {
+    let dir = home.join("pid");
+    fs::DirBuilder::new().recursive(true).mode(0o700).create(&dir)?;
+    fs::write(dir.join(pid), session)?;
+    let day = Duration::from_secs(24 * 3600);
+    for entry in fs::read_dir(&dir)?.flatten() {
+        let stale = entry.metadata().and_then(|m| m.modified()).map(|t| t.elapsed().unwrap_or_default() > day).unwrap_or(false);
+        if stale {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+    Ok(())
+}
+
 // Session for a CLI run from a shell Claude Code spawned (CLAUDE_PID is exported there).
 pub fn session_from_claude(home: &Path) -> Option<String> {
     if let Ok(pid) = std::env::var("CLAUDE_PID") {
