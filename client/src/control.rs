@@ -2,13 +2,13 @@
 // without a model turn. One JSON request per connection, one text reply, then close.
 use serde::{Deserialize, Serialize};
 use std::future::Future;
+use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 
-pub const CONTROL_SOCKET: &str = "ctl.sock";
 
 #[derive(Serialize, Deserialize)]
 pub struct ControlRequest {
@@ -17,8 +17,14 @@ pub struct ControlRequest {
     pub args: Vec<String>,
 }
 
+// Unix socket paths are capped at 104 bytes on macOS, so the socket lives under a short
+// run/ directory next to sessions/, named by a hash of the session name.
 pub fn control_socket_path(session_dir: &Path) -> PathBuf {
-    session_dir.join(CONTROL_SOCKET)
+    use sha2::{Digest, Sha256};
+    let name = session_dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let hash = hex::encode(Sha256::digest(name.as_bytes()));
+    let home = session_dir.parent().and_then(Path::parent).unwrap_or(session_dir);
+    home.join("run").join(format!("{}.sock", &hash[..16]))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -55,6 +61,9 @@ impl ControlServer {
                 return Ok(None);
             }
             let _ = std::fs::remove_file(&path);
+        }
+        if let Some(dir) = path.parent() {
+            std::fs::DirBuilder::new().recursive(true).mode(0o700).create(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
         }
         let listener = UnixListener::bind(&path).map_err(|e| format!("cannot bind {}: {e}", path.display()))?;
         let handle = Arc::new(handle);

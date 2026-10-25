@@ -1,7 +1,7 @@
 mod app;
 mod claude_hook;
-mod control;
 mod codex;
+mod control;
 mod crypto;
 mod hub;
 mod mcp;
@@ -16,7 +16,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use store::{default_home, resolve_session_id, session_dir, session_from_claude, Store};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
+
+const DEFAULT_DESCRIPTION: &str = "a crosstalk session";
+const INBOX_WAIT_MAX: u64 = 55;
 
 /// Message other people's agent sessions, across accounts.
 #[derive(Parser)]
@@ -28,21 +31,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Claude Code Stop and UserPromptSubmit hook: deliver pending events when channel push is off
-    ClaudeHook,
-    /// Start this chat's channel from a Codex SessionStart hook (JSON on stdin)
-    CodexHook {
-        #[arg(long)]
-        config: PathBuf,
-    },
-    /// Run the channel process as a stdio MCP server (what the Claude Code plugin starts)
-    Mcp,
-    /// Run the channel process alone: hub connection and control socket, no MCP
-    Daemon {
-        /// Wake this Codex chat with `codex queue` on every inbound event
-        #[arg(long, value_name = "UUID")]
-        codex_thread: Option<String>,
-    },
     /// Show this session's id and hub connections
     Whoami,
     /// List peers and their pairing state
@@ -64,17 +52,40 @@ enum Command {
     Send { id: String, text: Vec<String> },
     /// Read pending events (for hosts without channel push)
     Inbox {
-        #[arg(default_value_t = 0)]
-        wait_seconds: u64,
+        /// Wait up to this many seconds for the first event, 55 at most
+        #[arg(long, value_name = "SECONDS", default_value_t = 0)]
+        wait: u64,
     },
-    /// Drop a peer, or without id delete this session's identity
-    Forget { id: Option<String> },
+    /// Drop a peer
+    Forget {
+        /// The peer to drop
+        #[arg(required_unless_present = "all", conflicts_with = "all")]
+        id: Option<String>,
+        /// Delete this session's identity and all its peers instead
+        #[arg(long)]
+        all: bool,
+    },
     /// Add a relay hub to your hub list and connect to it
     AddHub { url: String },
     /// Pid, session, thread and hub state of the channel process, as JSON
     Status,
     /// Stop a daemon
     Stop,
+    /// Run the channel process as a stdio MCP server (what the Claude Code plugin starts)
+    Mcp,
+    /// Run the channel process alone: hub connection and control socket, no MCP
+    Daemon {
+        /// Wake this Codex chat with `codex queue` on every inbound event
+        #[arg(long, value_name = "UUID")]
+        codex_thread: Option<String>,
+    },
+    /// Claude Code hook: session start message, and event delivery when channel push is off
+    ClaudeHook,
+    /// Codex SessionStart hook: start this chat's daemon (hook JSON on stdin)
+    CodexHook {
+        #[arg(long)]
+        config: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -82,20 +93,20 @@ async fn main() {
     let cli = Cli::parse();
     rustls::crypto::ring::default_provider().install_default().expect("first and only provider install");
     let result = match cli.command {
-        Command::ClaudeHook => claude_hook::run().await,
-        Command::CodexHook { config } => codex::hook(&config).await,
-        Command::Mcp => run_channel(false, None).await,
-        Command::Daemon { codex_thread } => run_channel(true, codex_thread).await,
         Command::Whoami => client("whoami", vec![]).await,
         Command::Peers => client("peers", vec![]).await,
-        Command::Connect { target, description } => client("connect", with_text(target, description, "a Claude Code session")).await,
-        Command::Accept { id, description } => client("accept", with_text(id, description, "a Claude Code session")).await,
+        Command::Connect { target, description } => client("connect", with_text(target, description, DEFAULT_DESCRIPTION)).await,
+        Command::Accept { id, description } => client("accept", with_text(id, description, DEFAULT_DESCRIPTION)).await,
         Command::Send { id, text } => client("send", with_text(id, text, "")).await,
-        Command::Inbox { wait_seconds } => client("inbox", vec![wait_seconds.to_string()]).await,
-        Command::Forget { id } => client("forget", id.into_iter().collect()).await,
+        Command::Inbox { wait } => client("inbox", vec![wait.min(INBOX_WAIT_MAX).to_string()]).await,
+        Command::Forget { id, all: _ } => client("forget", id.into_iter().collect()).await,
         Command::AddHub { url } => client("add-hub", vec![url]).await,
         Command::Status => client("status", vec![]).await,
         Command::Stop => client("stop", vec![]).await,
+        Command::Mcp => run_channel(false, None).await,
+        Command::Daemon { codex_thread } => run_channel(true, codex_thread).await,
+        Command::ClaudeHook => claude_hook::run().await,
+        Command::CodexHook { config } => codex::hook(&config).await,
     };
     if let Err(err) = result {
         eprintln!("crosstalk: {err}");
@@ -164,20 +175,27 @@ fn codex_waker(thread: String) -> Sink {
         }
     });
     Box::new(move |content, meta: Meta| {
-        // Keep routing details in the daemon log, not in the chat bubble.
+        // Routing details go to the daemon log, not into the chat.
         eprintln!("[crosstalk] codex event {}", json!(meta));
         let _ = tx.send(codex::format_event(&content, &meta));
     })
+}
+
+/// What a control command needs besides its arguments.
+struct Channel {
+    app: Mutex<App>,
+    stop: Notify,
+    session: String,
+    daemon: bool,
+    codex_thread: Option<String>,
 }
 
 async fn run_channel(daemon: bool, codex_thread: Option<String>) -> Result<(), String> {
     if daemon && std::env::var("CROSSTALK_SESSION").is_err() {
         return Err("daemon needs CROSSTALK_SESSION".into());
     }
-    if let Some(t) = &codex_thread {
-        if t.len() != 36 || !t.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
-            return Err("--codex-thread needs a thread uuid".into());
-        }
+    if codex_thread.as_deref().is_some_and(|t| !codex::is_thread_id(t)) {
+        return Err("--codex-thread needs a thread uuid".into());
     }
     let home = default_home();
     let session = resolve_session_id(&home).await;
@@ -186,77 +204,70 @@ async fn run_channel(daemon: bool, codex_thread: Option<String>) -> Result<(), S
     eprintln!("[crosstalk] session {session} is {}{}", identity.id, if daemon { " (daemon)" } else { "" });
 
     let writer = mcp::stdout_writer();
-    let (sink, pump): (Sink, Option<_>) = if daemon {
-        (codex_thread.clone().map(codex_waker).unwrap_or_else(|| Box::new(|_, _| {})), None)
-    } else {
-        let (tx, pump) = mcp::channel_sink(writer.clone());
-        (Box::new(move |content, meta| { let _ = tx.send((content, meta)); }), Some(pump))
+    let sink: Sink = match (&codex_thread, daemon) {
+        (Some(thread), true) => codex_waker(thread.clone()),
+        (None, true) => Box::new(|_, _| {}),
+        (_, false) => {
+            let (tx, pump) = mcp::channel_sink(writer.clone());
+            tokio::spawn(pump);
+            Box::new(move |content, meta| {
+                let _ = tx.send((content, meta));
+            })
+        }
     };
-    if let Some(pump) = pump {
-        tokio::spawn(pump);
-    }
 
     let (app, mut delivered) = App::new(store, identity, sink);
     let session_dir = app.store.dir.clone();
-    let app = Arc::new(Mutex::new(app));
+    let channel = Arc::new(Channel { app: Mutex::new(app), stop: Notify::new(), session, daemon, codex_thread });
 
     // Inbound envelopes from every hub.
     tokio::spawn({
-        let app = app.clone();
+        let channel = channel.clone();
         async move {
             while let Some((env, hub)) = delivered.recv().await {
-                let out = app.lock().await.on_deliver(env, hub);
+                let out = channel.app.lock().await.on_deliver(env, hub);
                 if let Some(out) = out {
-                    App::send_outgoing(&app, out).await;
+                    App::send_outgoing(&channel.app, out).await;
                 }
             }
         }
     });
 
-    let stop = Arc::new(tokio::sync::Notify::new());
-    let handler = {
-        let app = app.clone();
-        let stop = stop.clone();
-        let session = session.clone();
-        move |req: ControlRequest| {
-            let app = app.clone();
-            let stop = stop.clone();
-            let session = session.clone();
-            let codex_thread = codex_thread.clone();
-            async move { handle(&app, &stop, &session, daemon, codex_thread, req).await }
+    let ownership = if daemon { Ownership::Exclusive } else { Ownership::Shared };
+    let control = ControlServer::start(&session_dir, ownership, {
+        let channel = channel.clone();
+        move |req| {
+            let channel = channel.clone();
+            async move { handle(&channel, req).await }
         }
-    };
-    let control = ControlServer::start(&session_dir, if daemon { Ownership::Exclusive } else { Ownership::Shared }, handler).await?;
-    app.lock().await.start();
+    })
+    .await?;
+    channel.app.lock().await.start();
 
-    let ctrl_handler = {
-        let app = app.clone();
-        let stop = stop.clone();
-        move |cmd: String, args: Vec<String>| {
-            let app = app.clone();
-            let stop = stop.clone();
-            let session = session.clone();
-            async move { handle(&app, &stop, &session, daemon, None, ControlRequest { cmd, args }).await }
-        }
-    };
-    let stop_signal = stop_wait(stop.clone());
     if daemon {
-        stop_signal.await;
+        stop_wait(&channel.stop).await;
     } else {
         // Claude Code ends the server by closing stdin; without this the hub sockets keep the process alive.
+        let serve = mcp::serve(writer, {
+            let channel = channel.clone();
+            move |cmd, args| {
+                let channel = channel.clone();
+                async move { handle(&channel, ControlRequest { cmd, args }).await }
+            }
+        });
         tokio::select! {
-            _ = mcp::serve(writer, ctrl_handler) => {}
-            _ = stop_signal => {}
+            _ = serve => {}
+            _ = stop_wait(&channel.stop) => {}
         }
     }
     if let Some(c) = &control {
         c.stop();
     }
-    app.lock().await.stop();
+    channel.app.lock().await.stop();
     Ok(())
 }
 
-async fn stop_wait(stop: Arc<tokio::sync::Notify>) {
+async fn stop_wait(stop: &Notify) {
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).expect("signal handler");
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {}
@@ -265,26 +276,39 @@ async fn stop_wait(stop: Arc<tokio::sync::Notify>) {
     }
 }
 
-async fn handle(app: &Arc<Mutex<App>>, stop: &Arc<tokio::sync::Notify>, session: &str, daemon: bool, thread: Option<String>, req: ControlRequest) -> Result<String, String> {
+async fn handle(channel: &Arc<Channel>, req: ControlRequest) -> Result<String, String> {
+    let app = &channel.app;
     let args = req.args;
     let need = |n: usize| if args.len() < n { Err(format!("{} needs {n} argument{}", req.cmd, if n > 1 { "s" } else { "" })) } else { Ok(()) };
-    let rest = |from: usize, default: &str| { let t = args[from..].join(" "); if t.is_empty() { default.to_string() } else { t } };
+    let rest = |from: usize, default: &str| {
+        let text = args[from..].join(" ");
+        if text.is_empty() { default.to_string() } else { text }
+    };
     let out: Outgoing = match req.cmd.as_str() {
         "ping" => return Ok("pong".into()),
         "whoami" => return Ok(app.lock().await.whoami()),
         "peers" => return Ok(app.lock().await.peers()),
         "status" => {
             let guard = app.lock().await;
-            return Ok(json!({ "pid": std::process::id(), "session": session, "id": guard.identity.id, "daemon": daemon, "threadId": thread, "hubs": guard.hub_status() }).to_string());
+            return Ok(json!({
+                "pid": std::process::id(),
+                "session": channel.session,
+                "id": guard.identity.id,
+                "daemon": channel.daemon,
+                "threadId": channel.codex_thread,
+                "hubs": guard.hub_status(),
+            })
+            .to_string());
         }
         "stop" => {
-            if !daemon {
+            if !channel.daemon {
                 return Err("stop only applies to a daemon".into());
             }
-            let stop = stop.clone();
+            // The reply must reach the client before the socket goes away.
+            let channel = channel.clone();
             tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(100)).await;
-                stop.notify_one();
+                channel.stop.notify_one();
             });
             return Ok("stopping".into());
         }
@@ -292,31 +316,21 @@ async fn handle(app: &Arc<Mutex<App>>, stop: &Arc<tokio::sync::Notify>, session:
             need(1)?;
             return app.lock().await.add_hub(&args[0]);
         }
+        "inbox" => {
+            let wait = args.first().and_then(|s| s.parse::<u64>().ok()).unwrap_or(0).min(INBOX_WAIT_MAX);
+            return Ok(App::inbox(app, Duration::from_secs(wait)).await.unwrap_or_else(|| "inbox empty".into()));
+        }
         "connect" => {
             need(1)?;
-            app.lock().await.connect(&args[0], &rest(1, "a Claude Code session"))?
+            app.lock().await.connect(&args[0], &rest(1, DEFAULT_DESCRIPTION))?
         }
         "accept" => {
             need(1)?;
-            app.lock().await.accept(&args[0], &rest(1, "a Claude Code session"))?
+            app.lock().await.accept(&args[0], &rest(1, DEFAULT_DESCRIPTION))?
         }
         "send" => {
             need(2)?;
             app.lock().await.send(&args[0], &rest(1, ""))?
-        }
-        "inbox" => {
-            let wait = args.first().and_then(|s| s.parse::<u64>().ok()).unwrap_or(0).min(55);
-            let notify = app.lock().await.inbox_notify();
-            if wait > 0 {
-                let notified = notify.notified();
-                tokio::pin!(notified);
-                notified.as_mut().enable();
-                if let Some(text) = app.lock().await.drain_inbox() {
-                    return Ok(text);
-                }
-                let _ = tokio::time::timeout(Duration::from_secs(wait), notified).await;
-            }
-            return Ok(app.lock().await.drain_inbox().unwrap_or_else(|| "inbox empty".into()));
         }
         "forget" => app.lock().await.forget(args.first().map(String::as_str))?,
         other => return Err(format!("unknown command {other}")),

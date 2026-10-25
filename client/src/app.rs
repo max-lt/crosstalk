@@ -17,9 +17,9 @@ pub type Meta = BTreeMap<String, String>;
 /// Where inbound events go besides the inbox: a channel notification, a Codex queue, or nowhere.
 pub type Sink = Box<dyn Fn(String, Meta) + Send + Sync>;
 
-pub struct Event {
-    pub content: String,
-    pub meta: Meta,
+struct Event {
+    content: String,
+    meta: Meta,
 }
 
 pub struct App {
@@ -78,8 +78,20 @@ impl App {
         (app, rx)
     }
 
-    pub fn inbox_notify(&self) -> Arc<Notify> {
-        self.inbox_notify.clone()
+    /// Drains the inbox, after waiting up to `wait` for a first event when it is empty.
+    pub async fn inbox(app: &tokio::sync::Mutex<App>, wait: std::time::Duration) -> Option<String> {
+        let notify = app.lock().await.inbox_notify.clone();
+        let notified = notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        if let Some(text) = app.lock().await.drain_inbox() {
+            return Some(text);
+        }
+        if wait.is_zero() {
+            return None;
+        }
+        let _ = tokio::time::timeout(wait, notified).await;
+        app.lock().await.drain_inbox()
     }
 
     fn connect_hub(&mut self, url: &str) -> &HubConnection {
@@ -239,7 +251,7 @@ impl App {
         }
     }
 
-    pub fn drain_inbox(&mut self) -> Option<String> {
+    fn drain_inbox(&mut self) -> Option<String> {
         if self.inbox.is_empty() {
             return None;
         }
