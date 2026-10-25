@@ -6,6 +6,20 @@
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/session-start.sh" }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v crosstalk >/dev/null && crosstalk claude-hook || exit 0", "timeout": 10 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "command -v crosstalk >/dev/null && crosstalk claude-hook || exit 0", "timeout": 10 }
+        ]
+      }
     ]
   }
 }

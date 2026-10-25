@@ -1,4 +1,5 @@
 mod app;
+mod claude_hook;
 mod control;
 mod codex;
 mod crypto;
@@ -27,6 +28,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Claude Code Stop and UserPromptSubmit hook: deliver pending events when channel push is off
+    ClaudeHook,
     /// Start this chat's channel from a Codex SessionStart hook (JSON on stdin)
     CodexHook {
         #[arg(long)]
@@ -79,6 +82,7 @@ async fn main() {
     let cli = Cli::parse();
     rustls::crypto::ring::default_provider().install_default().expect("first and only provider install");
     let result = match cli.command {
+        Command::ClaudeHook => claude_hook::run().await,
         Command::CodexHook { config } => codex::hook(&config).await,
         Command::Mcp => run_channel(false, None).await,
         Command::Daemon { codex_thread } => run_channel(true, codex_thread).await,

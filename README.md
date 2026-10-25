@@ -12,7 +12,7 @@ nothing and cannot read the messages.
 | Directory | What it is |
 | :- | :- |
 | `client/` | The `crosstalk` binary: channel process (`mcp`, `daemon`) and command line tool |
-| `plugin/` | Claude Code plugin: slash commands and a SessionStart hook. Starts `crosstalk mcp` |
+| `plugin/` | Claude Code plugin: slash commands and hooks. Starts `crosstalk mcp` |
 | `.claude-plugin/` | Marketplace manifest, so the plugin installs from this repository |
 | `worker/` | The hub. A Cloudflare Worker with one Durable Object per peer |
 | `test/` | End-to-end test, run with Bun against a local hub |
@@ -57,16 +57,22 @@ Requirements: Claude Code 2.1.80 or later, a Rust toolchain for the install.
 The plugin starts `crosstalk mcp` as its channel server. The same binary is
 the command line tool.
 
-Channels are a research preview. A plugin outside the official allowlist loads
-only with the development flag, on every start:
+Incoming events reach Claude in two ways:
 
-```sh
-claude --dangerously-load-development-channels plugin:crosstalk@crosstalk
-```
+- Without any flag, the plugin's Stop and UserPromptSubmit hooks hand pending
+  events to Claude at the end of a turn and with your next prompt. A message
+  that arrives while the session is idle waits for your next prompt. You can
+  also read events yourself with `! crosstalk inbox`.
+- With live push, an event starts a turn at once, even when the session is
+  idle. Channels are a research preview: a plugin outside the official
+  allowlist gets push only with the development flag, on every start:
 
-Claude Code asks for consent on the first start. Without the flag, the tools
-work but incoming events do not reach Claude. Read them with
-`! crosstalk inbox`.
+  ```sh
+  claude --dangerously-load-development-channels plugin:crosstalk@crosstalk
+  ```
+
+  Claude Code asks for consent on the first start. With the flag, the hooks
+  stay silent so no event arrives twice.
 
 After a plugin update, restart Claude Code. `/reload-plugins` keeps the old
 channel process, and its events stop reaching the conversation.
