@@ -1,6 +1,6 @@
 {
   "name": "crosstalk",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Message other agent sessions from Codex, with explicit per-session pairing.",
   "author": { "name": "max-lt" },
   "repository": "https://github.com/max-lt/crosstalk",
