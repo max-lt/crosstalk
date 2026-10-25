@@ -19,7 +19,8 @@ use store::{default_home, resolve_session_id, session_dir, session_from_claude, 
 use tokio::sync::{Mutex, Notify};
 
 const DEFAULT_DESCRIPTION: &str = "a crosstalk session";
-const INBOX_WAIT_MAX: u64 = 55;
+// One control request blocks at most this long; --follow chains requests.
+const INBOX_WAIT_MAX: u64 = 300;
 
 /// Message other people's agent sessions, across accounts.
 #[derive(Parser)]
@@ -52,9 +53,12 @@ enum Command {
     Send { id: String, text: Vec<String> },
     /// Read pending events (for hosts without channel push)
     Inbox {
-        /// Wait up to this many seconds for the first event, 55 at most
-        #[arg(long, value_name = "SECONDS", default_value_t = 0)]
+        /// Wait up to this many seconds for the first event
+        #[arg(long, value_name = "SECONDS", default_value_t = 0, conflicts_with = "follow")]
         wait: u64,
+        /// Keep printing events as they arrive, until stopped
+        #[arg(long)]
+        follow: bool,
     },
     /// Drop a peer
     Forget {
@@ -98,7 +102,8 @@ async fn main() {
         Command::Connect { target, description } => client("connect", with_text(target, description, DEFAULT_DESCRIPTION)).await,
         Command::Accept { id, description } => client("accept", with_text(id, description, DEFAULT_DESCRIPTION)).await,
         Command::Send { id, text } => client("send", with_text(id, text, "")).await,
-        Command::Inbox { wait } => client("inbox", vec![wait.min(INBOX_WAIT_MAX).to_string()]).await,
+        Command::Inbox { follow: true, .. } => follow_inbox().await,
+        Command::Inbox { wait, .. } => client("inbox", vec![wait.min(INBOX_WAIT_MAX).to_string()]).await,
         Command::Forget { id, all: _ } => client("forget", id.into_iter().collect()).await,
         Command::AddHub { url } => client("add-hub", vec![url]).await,
         Command::Status => client("status", vec![]).await,
@@ -141,17 +146,32 @@ async fn socket_path(home: &Path) -> Result<PathBuf, String> {
     }
 }
 
-async fn client(cmd: &str, args: Vec<String>) -> Result<(), String> {
+async fn request(cmd: &str, args: Vec<String>) -> Result<String, String> {
     let path = socket_path(&default_home()).await?;
     if !path.exists() {
         return Err(format!("no channel process for this session ({})", path.display()));
     }
-    let reply = control::request(&path, &ControlRequest { cmd: cmd.into(), args }, Duration::from_secs(60)).await?;
-    if let Some(err) = reply.strip_prefix("error: ") {
-        return Err(err.to_string());
+    let timeout = Duration::from_secs(INBOX_WAIT_MAX + 5);
+    let reply = control::request(&path, &ControlRequest { cmd: cmd.into(), args }, timeout).await?;
+    match reply.strip_prefix("error: ") {
+        Some(err) => Err(err.to_string()),
+        None => Ok(reply),
     }
-    println!("{reply}");
+}
+
+async fn client(cmd: &str, args: Vec<String>) -> Result<(), String> {
+    println!("{}", request(cmd, args).await?);
     Ok(())
+}
+
+// Each batch of events is one stdout write, so a line-oriented reader (Monitor, tail) gets them as they land.
+async fn follow_inbox() -> Result<(), String> {
+    loop {
+        let events = request("inbox", vec![INBOX_WAIT_MAX.to_string()]).await?;
+        if events != "inbox empty" {
+            println!("{events}\n");
+        }
+    }
 }
 
 // ---- Channel process ----

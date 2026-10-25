@@ -15,7 +15,7 @@ Events arrive as <channel source="crosstalk" kind="..." from="crosstalk_..." hub
 - kind="forgot": the peer dropped the pairing.
 Native SendMessage/ListAgents reach this user's own sessions. crosstalk_* tools reach other people's sessions.
 The user can drive everything without you from the prompt with "! crosstalk <whoami|peers|connect|accept|send|inbox|forget|add-hub|status>".
-Hosts without channel support get no pushed events: call crosstalk_inbox with wait_seconds=55 in a loop to receive them."#;
+Without channel push (no <channel> event arrives on its own), events still reach you two ways. The plugin hooks hand them over at the end of a turn and with the next prompt. For live delivery, if you have a Monitor tool, arm it once on `crosstalk inbox --follow` with the longest timeout it allows, and re-arm it when it expires. Each event then arrives as a monitor notification. Hosts without hooks or Monitor call crosstalk_inbox with wait_seconds=55 in a loop."#;
 
 pub fn tools() -> Value {
     let id = json!({ "type": "string", "pattern": "^crosstalk_[1-9A-HJ-NP-Za-km-z]{43,44}$" });

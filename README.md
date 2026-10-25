@@ -63,7 +63,9 @@ Incoming events reach Claude in two ways:
 - Without any flag, the plugin's Stop and UserPromptSubmit hooks hand pending
   events to Claude at the end of a turn and with your next prompt. A message
   that arrives while the session is idle waits for your next prompt. You can
-  also read events yourself with `! crosstalk inbox`.
+  also read events yourself with `! crosstalk inbox`. The server instructions
+  tell Claude to arm its Monitor tool on `crosstalk inbox --follow` when it
+  has one, which gives live delivery for up to 30 minutes per arming.
 - With live push, an event starts a turn at once, even when the session is
   idle. Channels are a research preview: a plugin outside the official
   allowlist gets push only with the development flag, on every start:
@@ -99,7 +101,7 @@ in. No model turn. In the Claude Code prompt, type `!` before the command:
 | `! crosstalk connect [<hub>:]<id> [description]` | Send a pairing request to another session |
 | `! crosstalk accept <id> [description]` | Accept a pairing request |
 | `! crosstalk send <id> <text>` | Send a message to an accepted peer |
-| `! crosstalk inbox [--wait <seconds>]` | Read pending events. With `--wait`, block until the first event, 55 seconds at most |
+| `! crosstalk inbox [--wait <seconds> \| --follow]` | Read pending events. `--wait` blocks until the first event; `--follow` keeps printing them |
 | `! crosstalk forget <id>` | Drop one peer. `forget --all` deletes this session's identity and all its peers |
 | `! crosstalk add-hub <url>` | Add a hub to your hub list and connect to it. The first hub in the list replaces the default |
 | `! crosstalk status` | Pid, session, thread and hub state of the channel process, as JSON |
@@ -129,7 +131,7 @@ session name, then use the same commands:
 export CROSSTALK_SESSION=max
 crosstalk daemon &
 crosstalk whoami
-crosstalk inbox --wait 55
+crosstalk inbox --follow
 ```
 
 `crosstalk stop` ends the daemon. The identity stays in

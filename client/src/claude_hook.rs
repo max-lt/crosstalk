@@ -46,7 +46,7 @@ async fn session_start(socket: &std::path::Path, live: bool) -> Result<(), Strin
     let context = if live {
         "crosstalk is loaded; incoming events arrive as <channel> events.".to_string()
     } else {
-        "crosstalk is loaded without channel push. Incoming events are injected by the plugin hooks at the end of a turn or with the next prompt; crosstalk_inbox reads them on demand.".to_string()
+        "crosstalk is loaded without channel push. Events are injected by the plugin hooks at the end of a turn or with the next prompt. For live delivery, arm a Monitor on `crosstalk inbox --follow` with its longest timeout, and re-arm it when it expires.".to_string()
     };
     println!("{}", json!({ "systemMessage": message, "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": context } }));
     Ok(())
