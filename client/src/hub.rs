@@ -11,6 +11,7 @@ const SEND_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 const PING_INTERVAL: Duration = Duration::from_secs(30);
 const PONG_TIMEOUT: Duration = Duration::from_secs(10);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub fn normalize_hub_url(input: &str) -> Result<String, String> {
     let text = if input.contains("://") { input.to_string() } else { format!("https://{input}") };
@@ -93,13 +94,30 @@ async fn run(
             u.set_path(&format!("/ws/{}", identity.id));
             u
         };
-        let stopped = match tokio_tungstenite::connect_async(ws_url.as_str()).await {
-            Ok((ws, _)) => {
+        // Commands keep getting answers while the dial is in progress; a dead network
+        // must not hang the caller.
+        let connect = tokio::time::timeout(CONNECT_TIMEOUT, tokio_tungstenite::connect_async(ws_url.as_str()));
+        tokio::pin!(connect);
+        let dialed = loop {
+            tokio::select! {
+                result = &mut connect => break result,
+                cmd = rx.recv() => match cmd {
+                    Some(Command::Send(_, reply)) => { let _ = reply.send("offline".into()); }
+                    Some(Command::Stop) | None => return,
+                },
+            }
+        };
+        let stopped = match dialed {
+            Ok(Ok((ws, _))) => {
                 attempts = 0;
                 session(ws, &host, &identity, &delivered, &status, &mut rx).await
             }
-            Err(err) => {
+            Ok(Err(err)) => {
                 eprintln!("[crosstalk] hub {host}: {err}");
+                false
+            }
+            Err(_) => {
+                eprintln!("[crosstalk] hub {host}: connect timed out");
                 false
             }
         };
