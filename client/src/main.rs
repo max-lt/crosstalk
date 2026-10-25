@@ -76,8 +76,8 @@ enum Command {
         #[arg(long)]
         attach: bool,
         /// Codex hook config, for the chat-to-session mapping (with --attach)
-        #[arg(long, requires = "attach")]
-        config: Option<PathBuf>,
+        #[arg(long, requires = "attach", env = "CROSSTALK_CODEX_CONFIG", default_value_os_t = codex::default_config())]
+        config: PathBuf,
     },
     /// Run the channel process alone: hub connection and control socket, no MCP
     Daemon {
@@ -89,7 +89,7 @@ enum Command {
     ClaudeHook,
     /// Codex SessionStart hook: start this chat's daemon (hook JSON on stdin)
     CodexHook {
-        #[arg(long)]
+        #[arg(long, env = "CROSSTALK_CODEX_CONFIG", default_value_os_t = codex::default_config())]
         config: PathBuf,
     },
 }

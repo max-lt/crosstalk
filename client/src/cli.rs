@@ -68,7 +68,7 @@ pub async fn follow_inbox() -> Result<(), String> {
 // over its control socket, with no identity or hub connection of their own. One attached
 // server serves every chat: each call names its thread, and the daemon must confirm it.
 // No fallback to "the only live daemon": a call without a thread is refused.
-pub async fn attach_mcp(config: Option<PathBuf>) -> Result<(), String> {
+pub async fn attach_mcp(config: PathBuf) -> Result<(), String> {
     let config = Arc::new(config);
     mcp::serve(mcp::stdout_writer(), mcp::Mode::Attached, move |thread, cmd, args| {
         let config = config.clone();
@@ -78,7 +78,7 @@ pub async fn attach_mcp(config: Option<PathBuf>) -> Result<(), String> {
             }
             let thread =
                 thread.ok_or("thread_id is required: this chat's id, from the session start hook")?;
-            let path = daemon_for_thread(&thread, config.as_deref()).await?;
+            let path = daemon_for_thread(&thread, &config).await?;
             request_at(&path, &cmd, args).await
         }
     })
@@ -87,7 +87,7 @@ pub async fn attach_mcp(config: Option<PathBuf>) -> Result<(), String> {
 }
 
 // Fails closed: a daemon that serves another chat, or none, is an error, never a fallback.
-async fn daemon_for_thread(thread: &str, config: Option<&Path>) -> Result<PathBuf, String> {
+async fn daemon_for_thread(thread: &str, config: &Path) -> Result<PathBuf, String> {
     let session = codex::session_for_thread(thread, config)?;
     let path = control::control_socket_path(&session_dir(&default_home(), &session));
     if !path.exists() || !control::is_alive(&path).await {

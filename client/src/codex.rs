@@ -9,7 +9,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Read;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::os::unix::process::CommandExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -88,20 +88,24 @@ struct Config {
     sessions: HashMap<String, String>,
 }
 
-/// The session name of a chat: the mapped one, else codex-<thread>. Without a config file, the default only.
-pub fn session_for_thread(thread: &str, config: Option<&Path>) -> Result<String, String> {
+/// Where the Codex hook and the attached server read their settings by default.
+pub fn default_config() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    PathBuf::from(home).join(".codex").join("hooks").join("crosstalk.json")
+}
+
+/// The session name of a chat: the mapped one, else codex-<thread>. A missing config file means
+/// the default only.
+pub fn session_for_thread(thread: &str, config: &Path) -> Result<String, String> {
     #[derive(Deserialize)]
     struct Mapping {
         #[serde(default)]
         sessions: HashMap<String, String>,
     }
-    let sessions = match config {
-        Some(path) => {
-            serde_json::from_slice::<Mapping>(&fs::read(path).map_err(|e| e.to_string())?)
-                .map_err(|e| e.to_string())?
-                .sessions
-        }
-        None => HashMap::new(),
+    let sessions = match fs::read(config) {
+        Ok(bytes) => serde_json::from_slice::<Mapping>(&bytes).map_err(|e| e.to_string())?.sessions,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => HashMap::new(),
+        Err(err) => return Err(err.to_string()),
     };
     target(thread, &Config { codex: Default::default(), sessions })
 }

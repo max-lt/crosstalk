@@ -27,7 +27,7 @@ base64 = "0.22"
 hex = "0.4"
 rand = "0.9"
 url = "2"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 
 [profile.release]
 opt-level = "z"
