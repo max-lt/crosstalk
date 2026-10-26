@@ -1,6 +1,6 @@
 [package]
 name = "crosstalk"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Message agent sessions across machines, accounts and tools"
 license = "MIT"
