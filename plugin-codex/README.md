@@ -11,8 +11,8 @@ Install a Crosstalk binary built from this checkout. It must support
 `~/.codex/hooks/crosstalk.json` as described in the repository's
 [`docs/codex.md`](https://github.com/max-lt/crosstalk/blob/main/docs/codex.md).
 
-The launcher finds `crosstalk` on PATH, then in `~/.cargo/bin/crosstalk`.
-Set `CROSSTALK_BIN` to an absolute executable path to override it.
+The plugin runs `crosstalk` from the PATH of Codex. Run
+`command -v crosstalk` in the shell that starts Codex to check it.
 `CROSSTALK_CODEX_CONFIG` overrides the hook configuration path. Both the
 hook and the MCP server must use the same configuration and `CROSSTALK_HOME`.
 

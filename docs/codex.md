@@ -32,9 +32,8 @@ daemon; it does not open another hub connection.
    The plugin lives in `plugin-codex/`, separately from the Claude Code
    plugin in `plugin/`. Start a new chat with the plugin enabled and review
    and trust its bundled SessionStart hook. Installing the plugin does not
-   automatically trust its hooks. The launcher finds the binary on PATH
-   or at `~/.cargo/bin/crosstalk`; `CROSSTALK_BIN` can provide an absolute
-   path. `CROSSTALK_CODEX_CONFIG` can override the config path above.
+   automatically trust its hooks. The plugin runs `crosstalk` from the PATH
+   of Codex. `CROSSTALK_CODEX_CONFIG` can override the config path above.
 
    Existing installations with the user-level hook below can retain it:
    repeated hooks reuse the daemon when it belongs to the same chat.

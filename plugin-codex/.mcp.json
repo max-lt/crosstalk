@@ -1,17 +1,14 @@
 {
   "mcpServers": {
     "crosstalk": {
-      "command": "/bin/sh",
+      "command": "crosstalk",
       "args": [
-        "./scripts/run.sh",
         "mcp",
         "--attach"
       ],
-      "cwd": ".",
       "env_vars": [
         "PATH",
         "HOME",
-        "CROSSTALK_BIN",
         "CROSSTALK_HOME",
         "CROSSTALK_CODEX_CONFIG"
       ],

@@ -3,7 +3,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, mkdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:net'
 import assert from 'node:assert/strict'
@@ -22,13 +22,12 @@ writeFileSync(config, JSON.stringify({ codex: '/usr/bin/false', sessions: { [a]:
 const env = { ...process.env, CROSSTALK_HOME: home, CROSSTALK_HUB: 'http://127.0.0.1:1', CROSSTALK_SESSION: 'codex' }
 const children: ReturnType<typeof Bun.spawn>[] = []
 const client = new Client({ name: 'codex-attach-test', version: '1' })
-// Exercise the packaged launcher, not just the binary. Codex resolves a relative
-// cwd from the plugin root; legacy .mcp.json args do not expand PLUGIN_ROOT.
+// Exercise the packaged .mcp.json, not just the binary: its command is `crosstalk` on PATH.
 const transport = new StdioClientTransport({
   command: mcp.command,
   args: mcp.args,
-  cwd: resolve(pluginRoot, mcp.cwd ?? '.'),
-  env: { ...env, CROSSTALK_BIN: bin, CROSSTALK_CODEX_CONFIG: config },
+  cwd: pluginRoot,
+  env: { ...env, PATH: `${dirname(bin)}:${process.env.PATH}`, CROSSTALK_CODEX_CONFIG: config },
   stderr: 'pipe',
 })
 transport.stderr?.on('data', () => {})

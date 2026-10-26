@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${PLUGIN_ROOT}/scripts/run.sh\" codex-hook",
+            "command": "crosstalk codex-hook",
             "timeout": 20
           }
         ]
